@@ -104,24 +104,31 @@ const completeJourney = async (req, res) => {
   const { journeyId } = req.params;
 
   try {
-    const journey = await Journey.findOne({
-      _id: journeyId,
-      customer: req.user.id,
-    });
+    const journey = await Journey.findOneAndUpdate(
+      { _id: journeyId },
+      {
+        status: "COMPLETED",
+        completionTime: new Date(),
+      },
+      { new: true }
+    ).populate("customer", "name email phone");
 
     if (!journey) {
       throw new NotFoundError("Journey not found");
     }
 
-    journey.status = "COMPLETED";
-    journey.completionTime = new Date();
-    await journey.save();
+    // Emit websocket event for real-time updates
+    req.io.emit("journey:completed", {
+      journeyId,
+      status: "COMPLETED",
+    });
 
     res.status(StatusCodes.OK).json({
       success: true,
       journey,
     });
   } catch (error) {
+    console.error("Journey completion error:", error);
     throw new BadRequestError("Failed to complete journey");
   }
 };
