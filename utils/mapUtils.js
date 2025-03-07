@@ -1,18 +1,22 @@
 /**
  * Calculate distance between two points using Haversine formula
  */
-const calculateDistance = (lat1, lon1, lat2, lon2) => {
-  const R = 6371; // Earth's radius in km
-  const dLat = (lat2 - lat1) * (Math.PI / 180);
-  const dLon = (lon2 - lon1) * (Math.PI / 180);
+const calculateDistance = (point1, point2) => {
+  const R = 6371; // Earth's radius in kilometers
+  const lat1 = (point1.latitude * Math.PI) / 180;
+  const lat2 = (point2.latitude * Math.PI) / 180;
+  const deltaLat = ((point2.latitude - point1.latitude) * Math.PI) / 180;
+  const deltaLon = ((point2.longitude - point1.longitude) * Math.PI) / 180;
+
   const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * (Math.PI / 180)) *
-      Math.cos(lat2 * (Math.PI / 180)) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
+    Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
+    Math.cos(lat1) *
+      Math.cos(lat2) *
+      Math.sin(deltaLon / 2) *
+      Math.sin(deltaLon / 2);
+
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
+  return R * c; // Distance in kilometers
 };
 
 const calculateFare = (distance) => {
@@ -59,47 +63,47 @@ const generateOTP = () => {
 /**
  * Finds the nearest graph node to given coordinates
  */
-const findNearestNode = (lat, lng, nodes) => {
-  if (!nodes || nodes.length === 0) {
-    console.error("No nodes provided to findNearestNode");
-    return null;
-  }
+const findNearestNode = (lat, lng, nodes, maxDistance = 1000) => {
+  let nearest = null;
+  let minDistance = Infinity;
 
-  // Debug logging
-  console.log("Finding nearest node for coordinates:", { lat, lng });
-  console.log("Number of available nodes:", nodes.length);
-
-  let nearestNode = null;
-  let shortestDistance = Infinity;
+  console.log("Finding nearest node for:", { lat, lng });
+  console.log(
+    "Available nodes:",
+    nodes.map((n) => ({
+      name: n.name,
+      coords: [n.lat, n.lng],
+    }))
+  );
 
   nodes.forEach((node) => {
-    if (!node.lat || !node.lng) {
-      console.warn("Invalid node format:", node);
-      return;
-    }
+    const distance = calculateDistance(
+      { latitude: lat, longitude: lng },
+      { latitude: node.lat, longitude: node.lng }
+    );
 
-    const distance = calculateDistance(lat, lng, node.lat, node.lng);
-    console.log(`Distance to ${node.name}: ${distance}km`);
+    console.log(`Distance to ${node.name}: ${distance.toFixed(2)} km`);
 
-    if (distance < shortestDistance) {
-      shortestDistance = distance;
-      nearestNode = node.name;
-      console.log(`New nearest node: ${node.name} at ${distance}km`);
+    if (distance < minDistance) {
+      minDistance = distance;
+      nearest = {
+        nodeName: node.name,
+        distance,
+        coordinates: {
+          latitude: node.lat,
+          longitude: node.lng,
+        },
+      };
     }
   });
 
-  if (!nearestNode) {
-    console.error("Could not find nearest node");
-    return null;
-  }
+  console.log("Nearest node result:", {
+    node: nearest?.nodeName,
+    distance: nearest?.distance.toFixed(2),
+  });
 
-  const result = {
-    nodeName: nearestNode,
-    distance: shortestDistance,
-  };
-
-  console.log("Returning nearest node:", result);
-  return result;
+  // Return the nearest node even if it's beyond maxDistance
+  return nearest;
 };
 
 module.exports = {

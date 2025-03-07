@@ -1,47 +1,41 @@
 const StationGraph = require("../utils/graph.js");
-const {
-  calculateDistance,
-  calculateFare,
-  generateOTP,
-  findNearestNode,
-} = require("../utils/mapUtils.js");
+const { calculateDistance, findNearestNode } = require("../utils/mapUtils.js");
 
 const findRoutes = async (req, res) => {
   try {
-    const { source, destination, weight, quantity, sourceCoords, destCoords } =
-      req.body;
-
-    console.log("Request payload:", {
+    const {
       source,
       destination,
       weight,
       quantity,
       sourceCoords,
       destCoords,
+      allowedModes = ["air", "sea", "land", "train"],
+    } = req.body;
+
+    console.log("Request received on server");
+    console.log("Processing request with data:", {
+      source,
+      destination,
+      weight,
+      quantity,
+      sourceCoords,
+      destCoords,
+      allowedModes,
     });
 
-    // Input validation with detailed error messages
-    const missingFields = [];
-    if (!source) missingFields.push("source");
-    if (!destination) missingFields.push("destination");
-    if (!weight) missingFields.push("weight");
-    if (!quantity) missingFields.push("quantity");
-    if (!sourceCoords?.latitude || !sourceCoords?.longitude)
-      missingFields.push("sourceCoords");
-    if (!destCoords?.latitude || !destCoords?.longitude)
-      missingFields.push("destCoords");
-
-    if (missingFields.length > 0) {
+    // Validate request data
+    if (!sourceCoords || !destCoords) {
       return res.status(400).json({
         success: false,
-        message: `Missing required parameters: ${missingFields.join(", ")}`,
+        message: "Source and destination coordinates are required",
       });
     }
 
-    // Initialize graph with stations and routes
+    const MAX_DISTANCE = 1000; // 1000km search radius
     const graph = new StationGraph();
 
-    // Keep your existing stations and routes data
+    // Define all stations - Keep your existing comprehensive stations data
     const stations = [
       // Major Indian Cities
       ["Delhi", "city", ["land", "air"], 28.6139, 77.209],
@@ -72,8 +66,15 @@ const findRoutes = async (req, res) => {
       // American Hubs
       ["New York", "city", ["land", "air", "sea"], 40.7128, -74.006],
       ["Los Angeles", "city", ["land", "air", "sea"], 34.0522, -118.2437],
+
+      // Train Stations - India
+      ["New Delhi Railway", "station", ["train"], 28.6429, 77.2191],
+      ["Mumbai Central", "station", ["train"], 18.9711, 72.8193],
+      ["Chennai Central", "station", ["train"], 13.0827, 80.2707],
+      ["Howrah", "station", ["train"], 22.5851, 88.3425],
     ];
 
+    // Keep your existing comprehensive routes data
     const routes = [
       // Routes from India
       ["Delhi", "Dubai", "air", 300, 4],
@@ -115,94 +116,136 @@ const findRoutes = async (req, res) => {
       // American Routes
       ["New York", "Los Angeles", "air", 400, 6],
       ["New York", "Los Angeles", "land", 300, 48],
+
+      // Train Routes - India
+      ["New Delhi Railway", "Mumbai Central", "train", 120, 16],
+      ["Mumbai Central", "Chennai Central", "train", 150, 24],
+      ["Chennai Central", "Howrah", "train", 180, 28],
+      ["Howrah", "New Delhi Railway", "train", 160, 20],
+
+      // Intermodal Connections
+      ["New Delhi Railway", "Delhi", "land", 10, 0.5],
+      ["Mumbai Central", "Mumbai", "land", 8, 0.5],
+      ["Chennai Central", "Chennai", "land", 5, 0.5],
+      ["Howrah", "Kolkata", "land", 7, 0.5],
     ];
 
-    // Initialize graph with stations and routes
+    // Add stations that support allowed modes
+    let stationsAdded = 0;
     stations.forEach(([name, type, modes, lat, lng]) => {
-      graph.addStation(name, type, modes, lat, lng);
-      console.log(`Added station: ${name} at (${lat}, ${lng})`);
+      const availableModes = modes.filter((mode) =>
+        allowedModes.includes(mode)
+      );
+      if (availableModes.length > 0) {
+        graph.addStation(name, type, availableModes, lat, lng);
+        stationsAdded++;
+        console.log(
+          `Added station: ${name} with modes: ${availableModes.join(", ")}`
+        );
+      }
     });
+    console.log(`Total stations added: ${stationsAdded}`);
 
-    routes.forEach(([from, to, mode, cost, time]) => {
-      graph.addRoute(from, to, mode, cost, time);
-      console.log(`Added route: ${from} -> ${to} via ${mode}`);
-    });
-
-    // Format stations for nearest node calculation
-    const stationNodes = stations.map(([name, _, __, lat, lng]) => ({
+    // Create list of stations for nearest node search
+    const stationsList = stations.map(([name, _, __, lat, lng]) => ({
       name,
       lat,
       lng,
     }));
 
-    // Find nearest nodes with better error handling
+    // Find nearest stations
     const nearestSource = findNearestNode(
       sourceCoords.latitude,
       sourceCoords.longitude,
-      stationNodes
+      stationsList,
+      MAX_DISTANCE
     );
 
     const nearestDest = findNearestNode(
       destCoords.latitude,
       destCoords.longitude,
-      stationNodes
+      stationsList,
+      MAX_DISTANCE
     );
 
-    if (!nearestSource || !nearestDest) {
-      return res.status(404).json({
-        success: false,
-        message: "Could not find suitable nodes for route calculation",
-      });
-    }
-
-    console.log("Found nearest nodes:", {
+    console.log("Nearest nodes found:", {
       source: nearestSource,
       destination: nearestDest,
     });
 
-    // Calculate routes
-    const pathOptions = graph.yenKShortestPaths(
+    if (!nearestSource || !nearestDest) {
+      return res.status(404).json({
+        success: false,
+        message: "No stations found within reasonable distance",
+      });
+    }
+
+    // Add routes between stations
+    let routesAdded = 0;
+    routes.forEach(([from, to, mode, cost, time]) => {
+      if (allowedModes.includes(mode)) {
+        try {
+          graph.addRoute(from, to, mode, cost, time);
+          routesAdded++;
+          console.log(`Added route: ${from} -> ${to} via ${mode}`);
+        } catch (error) {
+          console.warn(
+            `Failed to add route ${from} -> ${to}: ${error.message}`
+          );
+        }
+      }
+    });
+    console.log(`Total routes added: ${routesAdded}`);
+
+    // Find paths
+    const pathOptions = graph.findAllPaths(
       nearestSource.nodeName,
       nearestDest.nodeName,
-      3
+      5
     );
 
     if (!pathOptions || pathOptions.length === 0) {
       return res.status(404).json({
         success: false,
-        message: "No valid routes found between the selected locations",
+        message: `No routes found between ${nearestSource.nodeName} and ${nearestDest.nodeName} using selected modes`,
       });
     }
 
-    // Format response
-    const formattedRoutes = pathOptions.map((route) => ({
-      path: route.path,
-      segments: route.segments,
-      totalCost: route.cost,
-      totalTime: route.time,
-      feasible: route.segments.every((segment) => segment.capacity >= weight),
-      sourceInfo: {
-        selected: source,
-        mappedTo: nearestSource.nodeName,
-        distance: nearestSource.distance,
-      },
-      destinationInfo: {
-        selected: destination,
-        mappedTo: nearestDest.nodeName,
-        distance: nearestDest.distance,
-      },
-    }));
-    console.log(formattedRoutes)
+    // Format and filter routes
+    const formattedRoutes = pathOptions
+      .map((route) => ({
+        ...route,
+        feasible: route.segments.every((segment) => segment.capacity >= weight),
+        sourceInfo: {
+          selected: source,
+          mappedTo: nearestSource.nodeName,
+          distance: nearestSource.distance,
+        },
+        destinationInfo: {
+          selected: destination,
+          mappedTo: nearestDest.nodeName,
+          distance: nearestDest.distance,
+        },
+      }))
+      .filter((route) => route.feasible);
+
+    if (formattedRoutes.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "No feasible routes found for the given package weight",
+      });
+    }
+
+    console.log(`Found ${formattedRoutes.length} feasible routes`);
     return res.status(200).json({
       success: true,
       data: formattedRoutes,
     });
   } catch (error) {
-    console.error("Error in findRoutes:", error);
+    console.error("Server error:", error);
     return res.status(500).json({
       success: false,
       message: error.message,
-      stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
     });
   }
 };

@@ -248,6 +248,65 @@ class StationGraph {
     }
     return A;
   }
+
+  /**
+   * Find multiple paths between two stations
+   * @param {string} source - Starting station
+   * @param {string} destination - Destination station
+   * @param {number} k - Number of paths to find
+   * @returns {Array} Array of path objects with segments, cost, time etc.
+   */
+  findAllPaths(source, destination, k) {
+    if (!this.nodes[source] || !this.nodes[destination]) {
+      throw new Error(
+        "Both source and destination stations must exist in the graph."
+      );
+    }
+
+    const paths = [];
+
+    // Get k paths using Yen's algorithm
+    const kPaths = this.yenKShortestPaths(source, destination, k);
+
+    // Format each path with required information
+    kPaths.forEach((pathInfo) => {
+      const path = pathInfo.path;
+      const segments = [];
+
+      // Create segments from path
+      for (let i = 0; i < path.length - 1; i++) {
+        const from = path[i];
+        const to = path[i + 1];
+        const edge = this.adjList[from][to];
+
+        segments.push({
+          from,
+          to,
+          mode: edge.mode,
+          cost: edge.cost,
+          time: edge.time,
+          capacity: edge.capacity || 1000, // Default capacity if not specified
+          fromCoords: {
+            latitude: this.nodes[from].lat,
+            longitude: this.nodes[from].lng,
+          },
+          toCoords: {
+            latitude: this.nodes[to].lat,
+            longitude: this.nodes[to].lng,
+          },
+        });
+      }
+
+      paths.push({
+        path,
+        segments,
+        totalCost: this.calculatePathCost(path),
+        totalTime: this.calculatePathTime(path),
+      });
+    });
+
+    return paths;
+  }
 }
 
 module.exports = StationGraph;
