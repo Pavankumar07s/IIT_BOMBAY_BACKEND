@@ -77,57 +77,57 @@ const findRoutes = async (req, res) => {
     // Keep your existing comprehensive routes data
     const routes = [
       // Routes from India
-      ["Delhi", "Dubai", "air", 300, 4],
-      ["Delhi", "Mumbai", "land", 100, 24],
-      ["Delhi", "Mumbai", "air", 150, 2],
-      ["Mumbai", "Dubai", "air", 250, 3.5],
-      ["Mumbai", "Dubai", "sea", 180, 72],
-      ["Chennai", "Singapore", "air", 400, 5.5],
-      ["Chennai", "Singapore", "sea", 200, 120],
-      ["Mumbai", "Singapore", "sea", 300, 168],
-      ["Kolkata", "Hong Kong", "air", 450, 4.5],
+      ["Delhi", "Dubai", "air"],
+      ["Delhi", "Mumbai", "land"],
+      ["Delhi", "Mumbai", "air"],
+      ["Mumbai", "Dubai", "air"],
+      ["Mumbai", "Dubai", "sea"],
+      ["Chennai", "Singapore", "air"],
+      ["Chennai", "Singapore", "sea"],
+      ["Mumbai", "Singapore", "sea"],
+      ["Kolkata", "Hong Kong", "air"],
 
       // Middle East Connections
-      ["Dubai", "London", "air", 500, 7],
-      ["Dubai", "Rotterdam", "sea", 800, 240],
-      ["Dubai", "Singapore", "air", 450, 7.5],
-      ["Dubai", "Doha", "land", 80, 8],
-      ["Abu Dhabi", "Doha", "air", 120, 1],
+      ["Dubai", "London", "air"],
+      ["Dubai", "Rotterdam", "sea"],
+      ["Dubai", "Singapore", "air"],
+      ["Dubai", "Doha", "land"],
+      ["Abu Dhabi", "Doha", "air"],
 
       // European Routes
-      ["London", "Rotterdam", "land", 150, 8],
-      ["London", "Paris", "land", 100, 5],
-      ["Paris", "Frankfurt", "land", 120, 6],
-      ["Rotterdam", "Hamburg", "land", 180, 7],
-      ["Rotterdam", "Amsterdam", "land", 50, 1.5],
-      ["Frankfurt", "Hamburg", "land", 150, 6],
+      ["London", "Rotterdam", "land"],
+      ["London", "Paris", "land"],
+      ["Paris", "Frankfurt", "land"],
+      ["Rotterdam", "Hamburg", "land"],
+      ["Rotterdam", "Amsterdam", "land"],
+      ["Frankfurt", "Hamburg", "land"],
 
       // Asian Routes
-      ["Singapore", "Hong Kong", "air", 350, 4],
-      ["Singapore", "Hong Kong", "sea", 200, 96],
-      ["Hong Kong", "Shanghai", "air", 250, 3],
-      ["Hong Kong", "Shanghai", "sea", 150, 72],
+      ["Singapore", "Hong Kong", "air"],
+      ["Singapore", "Hong Kong", "sea"],
+      ["Hong Kong", "Shanghai", "air"],
+      ["Hong Kong", "Shanghai", "sea"],
 
       // Trans-Atlantic Routes
-      ["London", "New York", "air", 800, 8],
-      ["Rotterdam", "New York", "sea", 600, 168],
-      ["Paris", "New York", "air", 850, 8.5],
+      ["London", "New York", "air"],
+      ["Rotterdam", "New York", "sea"],
+      ["Paris", "New York", "air"],
 
       // American Routes
-      ["New York", "Los Angeles", "air", 400, 6],
-      ["New York", "Los Angeles", "land", 300, 48],
+      ["New York", "Los Angeles", "air"],
+      ["New York", "Los Angeles", "land"],
 
       // Train Routes - India
-      ["New Delhi Railway", "Mumbai Central", "train", 120, 16],
-      ["Mumbai Central", "Chennai Central", "train", 150, 24],
-      ["Chennai Central", "Howrah", "train", 180, 28],
-      ["Howrah", "New Delhi Railway", "train", 160, 20],
+      ["New Delhi Railway", "Mumbai Central", "train"],
+      ["Mumbai Central", "Chennai Central", "train"],
+      ["Chennai Central", "Howrah", "train"],
+      ["Howrah", "New Delhi Railway", "train"],
 
       // Intermodal Connections
-      ["New Delhi Railway", "Delhi", "land", 10, 0.5],
-      ["Mumbai Central", "Mumbai", "land", 8, 0.5],
-      ["Chennai Central", "Chennai", "land", 5, 0.5],
-      ["Howrah", "Kolkata", "land", 7, 0.5],
+      ["New Delhi Railway", "Delhi", "land"],
+      ["Mumbai Central", "Mumbai", "land"],
+      ["Chennai Central", "Chennai", "land"],
+      ["Howrah", "Kolkata", "land"],
     ];
 
     // Add stations that support allowed modes
@@ -180,18 +180,63 @@ const findRoutes = async (req, res) => {
       });
     }
 
-    // Add routes between stations
+    // Add routes between stations using dynamic fare and time calculations
     let routesAdded = 0;
-    routes.forEach(([from, to, mode, cost, time]) => {
+    routes.forEach(([from, to, mode]) => {
       if (allowedModes.includes(mode)) {
-        try {
-          graph.addRoute(from, to, mode, cost, time);
-          routesAdded++;
-          console.log(`Added route: ${from} -> ${to} via ${mode}`);
-        } catch (error) {
-          console.warn(
-            `Failed to add route ${from} -> ${to}: ${error.message}`
+        // Find station coordinates from the stationsList
+        const stationFrom = stationsList.find((s) => s.name === from);
+        const stationTo = stationsList.find((s) => s.name === to);
+        if (stationFrom && stationTo) {
+          // Calculate distance (in kilometers)
+          const distance = calculateDistance(
+            stationFrom.lat,
+            stationFrom.lng,
+            stationTo.lat,
+            stationTo.lng
           );
+          // Define cost factor ($ per km) and speed (km/hr) per mode
+          let costFactor, speed;
+          switch (mode) {
+            case "air":
+              costFactor = 0.25; // example: $0.25 per km
+              speed = 900; // average air speed ~900 km/h
+              break;
+            case "sea":
+              costFactor = 0.1; // example: $0.10 per km
+              speed = 30; // average sea speed ~30 km/h
+              break;
+            case "land":
+              costFactor = 0.2; // example: $0.20 per km
+              speed = 80; // average land speed ~80 km/h
+              break;
+            case "train":
+              costFactor = 0.15; // example: $0.15 per km
+              speed = 100; // average train speed ~100 km/h
+              break;
+            default:
+              costFactor = 0.2;
+              speed = 60;
+          }
+          // Compute dynamic cost and time
+          const dynamicCost = Math.ceil(
+            distance * costFactor * weight * quantity
+          );
+          const dynamicTime = Math.ceil(distance / speed);
+
+          try {
+            graph.addRoute(from, to, mode, dynamicCost, dynamicTime);
+            routesAdded++;
+            console.log(
+              `Added route: ${from} -> ${to} via ${mode} | Distance: ${distance.toFixed(
+                1
+              )} km, Cost: ${dynamicCost}, Time: ${dynamicTime} hrs`
+            );
+          } catch (error) {
+            console.warn(
+              `Failed to add route ${from} -> ${to}: ${error.message}`
+            );
+          }
         }
       }
     });
